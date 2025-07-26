@@ -6,34 +6,32 @@ let pluginName: string;
 // 预设字体选项
 const PRESET_FONTS = {
   "system": {
-    name: "System Default",
     family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
   },
   "serif": {
-    name: "Serif",
     family: "'Times New Roman', Times, serif"
   },
   "sans-serif": {
-    name: "Sans-serif",
     family: "'TsangerYunHei-W03', Arial, Helvetica, sans-serif"
   },
   "monospace": {
-    name: "Monospace",
     family: "'Courier New', Courier, monospace"
   },
   "chinese": {
-    name: "Chinese",
     family: "'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'WenQuanYi Micro Hei', sans-serif"
   },
   "elegant": {
-    name: "Elegant",
     family: "'Georgia', 'Times New Roman', serif"
   },
   "modern": {
-    name: "Modern",
     family: "'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif"
   }
 };
+
+// 获取字体显示名称
+function getFontDisplayName(fontKey: string): string {
+  return t(`fontTheme.presetFonts.${fontKey}`) || fontKey;
+}
 
 // 应用字体到页面
 function applyFont(fontFamily: string) {
@@ -116,7 +114,7 @@ function showFontSelector() {
         color: var(--orca-color-text-1);
       ">
         ${Object.entries(PRESET_FONTS).map(([key, font]) => 
-          `<option value="${key}" ${key === currentFont ? 'selected' : ''}>${font.name}</option>`
+          `<option value="${key}" ${key === currentFont ? 'selected' : ''}>${getFontDisplayName(key)}</option>`
         ).join('')}
       </select>
     </div>
@@ -192,7 +190,7 @@ function showFontSelector() {
     const target = e.target as HTMLSelectElement;
     const fontKey = target.value;
     saveFont(fontKey);
-    orca.notify('success', `${t('fontTheme.fontChanged')}${PRESET_FONTS[fontKey as keyof typeof PRESET_FONTS]?.name || fontKey}`);
+    orca.notify('success', `${t('fontTheme.fontChanged')}${getFontDisplayName(fontKey)}`);
   });
 
   applyCustomFontBtn.addEventListener('click', () => {
@@ -252,7 +250,7 @@ export async function load(_name: string) {
       const nextFont = fontKeys[nextIndex];
       
       saveFont(nextFont);
-      orca.notify('info', `${t('fontTheme.fontSwitchedTo')}${PRESET_FONTS[nextFont as keyof typeof PRESET_FONTS]?.name || nextFont}`);
+      orca.notify('info', `${t('fontTheme.fontSwitchedTo')}${getFontDisplayName(nextFont)}`);
     },
     t('fontTheme.toggleFont')
   );
