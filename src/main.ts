@@ -28,18 +28,61 @@ const PRESET_FONTS = {
   }
 };
 
+// 字体名称映射表（中文名称到CSS字体名称）
+const FONT_NAME_MAPPING: Record<string, string> = {
+  "霞梧文楷": "LXGW Wenkai",
+  "霞鹜文楷": "LXGW Wenkai",
+  "文楷": "LXGW Wenkai",
+  "LXGW Wenkai": "LXGW Wenkai",
+  "LXGW WenKai": "LXGW Wenkai",
+  "仓耳今楷": "TsangerJinKai03-W04",
+  "今楷": "TsangerJinKai03-W04",
+  "TsangerJinKai03-W04": "TsangerJinKai03-W04"
+};
+
 // 获取字体显示名称
 function getFontDisplayName(fontKey: string): string {
   return t(`fontTheme.presetFonts.${fontKey}`) || fontKey;
 }
 
+// 保存自定义字体历史记录
+function saveCustomFontHistory(fontName: string) {
+  const history = getCustomFontHistory();
+  // 移除已存在的相同字体
+  const filteredHistory = history.filter(font => font !== fontName);
+  // 将新字体添加到开头
+  const newHistory = [fontName, ...filteredHistory].slice(0, 10); // 最多保存10个
+  localStorage.setItem('orca-custom-font-history', JSON.stringify(newHistory));
+}
+
+  // 获取自定义字体历史记录
+  function getCustomFontHistory(): string[] {
+    try {
+      const history = localStorage.getItem('orca-custom-font-history');
+      return history ? JSON.parse(history) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  // 清除自定义字体历史记录
+  function clearCustomFontHistory() {
+    localStorage.removeItem('orca-custom-font-history');
+  }
+
 // 应用字体到页面
 function applyFont(fontFamily: string) {
   const style = document.createElement('style');
   style.id = 'orca-font-theme-style';
+  
+  // 处理字体名称，确保包含空格的字体名称被正确引用
+  const processedFontFamily = fontFamily.includes(' ') && !fontFamily.startsWith("'") && !fontFamily.startsWith('"') 
+    ? `'${fontFamily}'` 
+    : fontFamily;
+  
   style.textContent = `
     :root {
-      --orca-fontfamily-fallback: ${fontFamily} !important;
+      --orca-fontfamily-fallback: ${processedFontFamily} !important;
     }
   `;
   
@@ -61,8 +104,16 @@ function getCurrentFont(): string {
 // 保存字体设置
 function saveFont(fontKey: string) {
   localStorage.setItem('orca-font-theme', fontKey);
-  const fontFamily = PRESET_FONTS[fontKey as keyof typeof PRESET_FONTS]?.family || fontKey;
-  applyFont(fontFamily);
+  
+  // 检查是否是预设字体
+  if (PRESET_FONTS[fontKey as keyof typeof PRESET_FONTS]) {
+    const fontFamily = PRESET_FONTS[fontKey as keyof typeof PRESET_FONTS].family;
+    applyFont(fontFamily);
+  } else {
+    // 检查字体名称映射
+    const mappedFont = FONT_NAME_MAPPING[fontKey] || fontKey;
+    applyFont(mappedFont);
+  }
 }
 
 // 显示字体选择对话框
@@ -123,7 +174,7 @@ function showFontSelector() {
       <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500; color: var(--orca-color-text-1);">
         ${t('fontTheme.customFont')}:
       </label>
-      <div style="display: flex; gap: 8px;">
+      <div style="display: flex; gap: 8px; position: relative;">
         <input
           type="text"
           id="custom-font-input"
@@ -152,11 +203,32 @@ function showFontSelector() {
         >
           ${t('fontTheme.apply')}
         </button>
+        <div
+          id="custom-font-suggestions"
+          style="
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: var(--orca-color-bg-1);
+            border: 1px solid var(--orca-color-border);
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 10001;
+            display: none;
+            margin-top: 4px;
+          "
+        ></div>
       </div>
     </div>
     
     <div style="font-size: 12px; color: var(--orca-color-text-2); margin-bottom: 16px;">
       ${t('tip')}
+    </div>
+    
+    <div style="font-size: 11px; color: var(--orca-color-text-3); margin-bottom: 16px; padding: 8px; background: var(--orca-color-bg-2); border-radius: 4px;">
+      ${t('fontTheme.commonFonts')}
     </div>
     
     <div style="display: flex; gap: 8px; justify-content: flex-end;">
@@ -185,6 +257,81 @@ function showFontSelector() {
   const customFontInput = content.querySelector('#custom-font-input') as HTMLInputElement;
   const applyCustomFontBtn = content.querySelector('#apply-custom-font') as HTMLButtonElement;
   const closeBtn = content.querySelector('#close-dialog') as HTMLButtonElement;
+  const suggestionsContainer = content.querySelector('#custom-font-suggestions') as HTMLDivElement;
+
+  // 显示候选菜单
+  function showSuggestions() {
+    const history = getCustomFontHistory();
+    if (history.length === 0) {
+      suggestionsContainer.style.display = 'none';
+      return;
+    }
+
+    suggestionsContainer.innerHTML = `
+      <div style="
+        padding: 8px 12px;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--orca-color-text-2);
+        background: var(--orca-color-bg-2);
+        border-bottom: 1px solid var(--orca-color-border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      ">
+        <span>${t('fontTheme.recentFonts')}</span>
+        <button
+          id="clear-history-btn"
+          style="
+            background: none;
+            border: none;
+            color: var(--orca-color-text-3);
+            cursor: pointer;
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            transition: background-color 0.2s;
+          "
+          title="清除历史记录"
+          onmouseover="this.style.backgroundColor='var(--orca-color-bg-3)'"
+          onmouseout="this.style.backgroundColor='transparent'"
+        >
+          ✕
+        </button>
+      </div>
+      ${history.map(font => `
+        <div
+          class="suggestion-item"
+          style="
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--orca-color-text-1);
+            border-bottom: 1px solid var(--orca-color-border);
+            transition: background-color 0.2s;
+          "
+          data-font="${font}"
+          onmouseover="this.style.backgroundColor='var(--orca-color-bg-2)'"
+          onmouseout="this.style.backgroundColor='var(--orca-color-bg-1)'"
+        >
+          ${font}
+        </div>
+      `).join('')}
+    `;
+
+    suggestionsContainer.style.display = 'block';
+  }
+
+  // 隐藏候选菜单
+  function hideSuggestions() {
+    suggestionsContainer.style.display = 'none';
+  }
+
+  // 选择候选字体
+  function selectSuggestion(fontName: string) {
+    customFontInput.value = fontName;
+    hideSuggestions();
+  }
 
   fontSelect.addEventListener('change', (e) => {
     const target = e.target as HTMLSelectElement;
@@ -193,12 +340,41 @@ function showFontSelector() {
     orca.notify('success', `${t('fontTheme.fontChanged')}${getFontDisplayName(fontKey)}`);
   });
 
+  // 自定义字体输入框事件
+  customFontInput.addEventListener('focus', () => {
+    showSuggestions();
+  });
+
+  customFontInput.addEventListener('blur', () => {
+    // 延迟隐藏，以便点击候选项
+    setTimeout(() => {
+      hideSuggestions();
+    }, 150);
+  });
+
+  // 候选菜单点击事件
+  suggestionsContainer.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    if (target.classList.contains('suggestion-item')) {
+      const fontName = target.getAttribute('data-font');
+      if (fontName) {
+        selectSuggestion(fontName);
+      }
+    } else if (target.id === 'clear-history-btn') {
+      clearCustomFontHistory();
+      hideSuggestions();
+      orca.notify('info', t('fontTheme.historyCleared'));
+    }
+  });
+
   applyCustomFontBtn.addEventListener('click', () => {
     const customFont = customFontInput.value.trim();
     if (customFont) {
       saveFont(customFont);
+      saveCustomFontHistory(customFont); // 保存到历史记录
       orca.notify('success', `${t('fontTheme.customFontApplied')}${customFont}`);
       customFontInput.value = '';
+      hideSuggestions();
     }
   });
 
@@ -236,8 +412,7 @@ export async function load(_name: string) {
 
   // 应用保存的字体设置
   const savedFont = getCurrentFont();
-  const fontFamily = PRESET_FONTS[savedFont as keyof typeof PRESET_FONTS]?.family || savedFont;
-  applyFont(fontFamily);
+  saveFont(savedFont); // 使用 saveFont 函数来确保字体映射正确应用
 
   // 注册字体切换命令
   orca.commands.registerCommand(
