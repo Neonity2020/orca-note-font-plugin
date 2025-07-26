@@ -71,7 +71,7 @@ function saveCustomFontHistory(fontName: string) {
   }
 
 // 应用字体到页面
-function applyFont(fontFamily: string) {
+function applyFont(fontFamily: string, titleFontFamily?: string) {
   const style = document.createElement('style');
   style.id = 'orca-font-theme-style';
   
@@ -80,9 +80,23 @@ function applyFont(fontFamily: string) {
     ? `'${fontFamily}'` 
     : fontFamily;
   
+  const processedTitleFontFamily = titleFontFamily 
+    ? (titleFontFamily.includes(' ') && !titleFontFamily.startsWith("'") && !titleFontFamily.startsWith('"') 
+        ? `'${titleFontFamily}'` 
+        : titleFontFamily)
+    : processedFontFamily;
+  
   style.textContent = `
     :root {
       --orca-fontfamily-fallback: ${processedFontFamily} !important;
+    }
+    
+    /* 标题字体设置 */
+    h1, h2, h3, h4, h5, h6,
+    .orca-block-title,
+    .orca-block-title *,
+    [data-block-type="heading"] {
+      font-family: ${processedTitleFontFamily} !important;
     }
   `;
   
@@ -101,18 +115,34 @@ function getCurrentFont(): string {
   return savedFont || 'system';
 }
 
+// 获取当前标题字体设置
+function getCurrentTitleFont(): string {
+  const savedTitleFont = localStorage.getItem('orca-title-font-theme');
+  return savedTitleFont || getCurrentFont();
+}
+
 // 保存字体设置
-function saveFont(fontKey: string) {
+function saveFont(fontKey: string, titleFontKey?: string) {
   localStorage.setItem('orca-font-theme', fontKey);
+  if (titleFontKey) {
+    localStorage.setItem('orca-title-font-theme', titleFontKey);
+  }
+  
+  // 获取标题字体
+  const savedTitleFont = titleFontKey || localStorage.getItem('orca-title-font-theme') || fontKey;
   
   // 检查是否是预设字体
   if (PRESET_FONTS[fontKey as keyof typeof PRESET_FONTS]) {
     const fontFamily = PRESET_FONTS[fontKey as keyof typeof PRESET_FONTS].family;
-    applyFont(fontFamily);
+    const titleFontFamily = PRESET_FONTS[savedTitleFont as keyof typeof PRESET_FONTS]?.family || 
+                           FONT_NAME_MAPPING[savedTitleFont] || savedTitleFont;
+    applyFont(fontFamily, titleFontFamily);
   } else {
     // 检查字体名称映射
     const mappedFont = FONT_NAME_MAPPING[fontKey] || fontKey;
-    applyFont(mappedFont);
+    const titleFontFamily = PRESET_FONTS[savedTitleFont as keyof typeof PRESET_FONTS]?.family || 
+                           FONT_NAME_MAPPING[savedTitleFont] || savedTitleFont;
+    applyFont(mappedFont, titleFontFamily);
   }
 }
 
@@ -145,6 +175,7 @@ function showFontSelector() {
   `;
 
   const currentFont = getCurrentFont();
+  const currentTitleFont = getCurrentTitleFont();
   
   content.innerHTML = `
     <h3 style="margin: 0 0 16px 0; font-size: 16px; font-weight: bold; color: var(--orca-color-text-1);">
@@ -153,7 +184,7 @@ function showFontSelector() {
     
     <div style="margin-bottom: 16px;">
       <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500; color: var(--orca-color-text-1);">
-        ${t('fontTheme.presetFonts')}:
+        ${t('fontTheme.bodyFont')}:
       </label>
       <select id="font-select" style="
         width: 100%;
@@ -172,7 +203,26 @@ function showFontSelector() {
     
     <div style="margin-bottom: 16px;">
       <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500; color: var(--orca-color-text-1);">
-        ${t('fontTheme.customFont')}:
+        ${t('fontTheme.titleFont')}:
+      </label>
+      <select id="title-font-select" style="
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid var(--orca-color-border);
+        border-radius: 4px;
+        font-size: 14px;
+        background-color: var(--orca-color-bg-1);
+        color: var(--orca-color-text-1);
+      ">
+        ${Object.entries(PRESET_FONTS).map(([key, font]) => 
+          `<option value="${key}" ${key === currentTitleFont ? 'selected' : ''}>${getFontDisplayName(key)}</option>`
+        ).join('')}
+      </select>
+    </div>
+    
+    <div style="margin-bottom: 16px;">
+      <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500; color: var(--orca-color-text-1);">
+        ${t('fontTheme.customBodyFont')}:
       </label>
       <div style="display: flex; gap: 8px; position: relative;">
         <input
@@ -223,6 +273,59 @@ function showFontSelector() {
       </div>
     </div>
     
+    <div style="margin-bottom: 16px;">
+      <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500; color: var(--orca-color-text-1);">
+        ${t('fontTheme.customTitleFont')}:
+      </label>
+      <div style="display: flex; gap: 8px; position: relative;">
+        <input
+          type="text"
+          id="custom-title-font-input"
+          placeholder="${t('fontTheme.customFontPlaceholder')}"
+          style="
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid var(--orca-color-border);
+            border-radius: 4px;
+            font-size: 14px;
+            background-color: var(--orca-color-bg-1);
+            color: var(--orca-color-text-1);
+          "
+        />
+        <button
+          id="apply-custom-title-font"
+          style="
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            background-color: var(--orca-color-primary-5);
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+          "
+        >
+          ${t('fontTheme.apply')}
+        </button>
+        <div
+          id="custom-title-font-suggestions"
+          style="
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: var(--orca-color-bg-1);
+            border: 1px solid var(--orca-color-border);
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 10001;
+            display: none;
+            margin-top: 4px;
+          "
+        ></div>
+      </div>
+    </div>
+    
     <div style="font-size: 12px; color: var(--orca-color-text-2); margin-bottom: 16px;">
       ${t('tip')}
     </div>
@@ -254,20 +357,24 @@ function showFontSelector() {
 
   // 事件处理
   const fontSelect = content.querySelector('#font-select') as HTMLSelectElement;
+  const titleFontSelect = content.querySelector('#title-font-select') as HTMLSelectElement;
   const customFontInput = content.querySelector('#custom-font-input') as HTMLInputElement;
+  const customTitleFontInput = content.querySelector('#custom-title-font-input') as HTMLInputElement;
   const applyCustomFontBtn = content.querySelector('#apply-custom-font') as HTMLButtonElement;
+  const applyCustomTitleFontBtn = content.querySelector('#apply-custom-title-font') as HTMLButtonElement;
   const closeBtn = content.querySelector('#close-dialog') as HTMLButtonElement;
   const suggestionsContainer = content.querySelector('#custom-font-suggestions') as HTMLDivElement;
+  const titleSuggestionsContainer = content.querySelector('#custom-title-font-suggestions') as HTMLDivElement;
 
   // 显示候选菜单
-  function showSuggestions() {
+  function showSuggestions(container: HTMLDivElement, isTitleFont: boolean = false) {
     const history = getCustomFontHistory();
     if (history.length === 0) {
-      suggestionsContainer.style.display = 'none';
+      container.style.display = 'none';
       return;
     }
 
-    suggestionsContainer.innerHTML = `
+    container.innerHTML = `
       <div style="
         padding: 8px 12px;
         font-size: 12px;
@@ -281,7 +388,7 @@ function showFontSelector() {
       ">
         <span>${t('fontTheme.recentFonts')}</span>
         <button
-          id="clear-history-btn"
+          class="clear-history-btn"
           style="
             background: none;
             border: none;
@@ -319,7 +426,7 @@ function showFontSelector() {
       `).join('')}
     `;
 
-    suggestionsContainer.style.display = 'block';
+    container.style.display = 'block';
   }
 
   // 隐藏候选菜单
@@ -328,8 +435,12 @@ function showFontSelector() {
   }
 
   // 选择候选字体
-  function selectSuggestion(fontName: string) {
-    customFontInput.value = fontName;
+  function selectSuggestion(fontName: string, isTitleFont: boolean = false) {
+    if (isTitleFont) {
+      customTitleFontInput.value = fontName;
+    } else {
+      customFontInput.value = fontName;
+    }
     hideSuggestions();
   }
 
@@ -337,15 +448,34 @@ function showFontSelector() {
     const target = e.target as HTMLSelectElement;
     const fontKey = target.value;
     saveFont(fontKey);
-    orca.notify('success', `${t('fontTheme.fontChanged')}${getFontDisplayName(fontKey)}`);
+    orca.notify('success', `${t('fontTheme.bodyFontChanged')}${getFontDisplayName(fontKey)}`);
+  });
+
+  titleFontSelect.addEventListener('change', (e) => {
+    const target = e.target as HTMLSelectElement;
+    const fontKey = target.value;
+    saveFont(getCurrentFont(), fontKey);
+    orca.notify('success', `${t('fontTheme.titleFontChanged')}${getFontDisplayName(fontKey)}`);
   });
 
   // 自定义字体输入框事件
   customFontInput.addEventListener('focus', () => {
-    showSuggestions();
+    showSuggestions(suggestionsContainer);
   });
 
   customFontInput.addEventListener('blur', () => {
+    // 延迟隐藏，以便点击候选项
+    setTimeout(() => {
+      hideSuggestions();
+    }, 150);
+  });
+
+  // 自定义标题字体输入框事件
+  customTitleFontInput.addEventListener('focus', () => {
+    showSuggestions(titleSuggestionsContainer, true);
+  });
+
+  customTitleFontInput.addEventListener('blur', () => {
     // 延迟隐藏，以便点击候选项
     setTimeout(() => {
       hideSuggestions();
@@ -360,7 +490,21 @@ function showFontSelector() {
       if (fontName) {
         selectSuggestion(fontName);
       }
-    } else if (target.id === 'clear-history-btn') {
+    } else if (target.classList.contains('clear-history-btn')) {
+      clearCustomFontHistory();
+      hideSuggestions();
+      orca.notify('info', t('fontTheme.historyCleared'));
+    }
+  });
+
+  titleSuggestionsContainer.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    if (target.classList.contains('suggestion-item')) {
+      const fontName = target.getAttribute('data-font');
+      if (fontName) {
+        selectSuggestion(fontName, true);
+      }
+    } else if (target.classList.contains('clear-history-btn')) {
       clearCustomFontHistory();
       hideSuggestions();
       orca.notify('info', t('fontTheme.historyCleared'));
@@ -372,8 +516,19 @@ function showFontSelector() {
     if (customFont) {
       saveFont(customFont);
       saveCustomFontHistory(customFont); // 保存到历史记录
-      orca.notify('success', `${t('fontTheme.customFontApplied')}${customFont}`);
+      orca.notify('success', `${t('fontTheme.customBodyFontApplied')}${customFont}`);
       customFontInput.value = '';
+      hideSuggestions();
+    }
+  });
+
+  applyCustomTitleFontBtn.addEventListener('click', () => {
+    const customTitleFont = customTitleFontInput.value.trim();
+    if (customTitleFont) {
+      saveFont(getCurrentFont(), customTitleFont);
+      saveCustomFontHistory(customTitleFont); // 保存到历史记录
+      orca.notify('success', `${t('fontTheme.customTitleFontApplied')}${customTitleFont}`);
+      customTitleFontInput.value = '';
       hideSuggestions();
     }
   });
